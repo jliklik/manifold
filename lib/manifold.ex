@@ -16,7 +16,7 @@ defmodule Manifold do
   @workers_per_partitioner Application.get_env(:manifold, :workers_per_partitioner, System.schedulers_online)
 
   @max_senders 128
-  @senders min(Application.get_env(:manifold, :senders, System.schedulers_online), @max_senders)
+  def senders(), do: min(Application.get_env(:manifold, :senders, System.schedulers_online), @max_senders)
 
   ## OTP
 
