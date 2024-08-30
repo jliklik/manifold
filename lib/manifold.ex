@@ -127,7 +127,7 @@ defmodule Manifold do
 
   def partitioner_for(pid) when is_pid(pid) do
     pid
-    |> Utils.partition_for(@partitioners)
+    |> Utils.partition_for(partitioners())
     |> partitioner_for
   end
 
