@@ -12,24 +12,25 @@ defmodule Manifold do
   @type option :: pack_mode_option() | send_mode_option()
 
   @max_partitioners 32
-  @partitioners min(Application.get_env(:manifold, :partitioners, 1), @max_partitioners)
-  @workers_per_partitioner Application.get_env(:manifold, :workers_per_partitioner, System.schedulers_online)
+  def partitioners(), do: min(Application.get_env(:manifold, :partitioners, 1), @max_partitioners)
+  def workers_per_partitioner(), do: Application.get_env(:manifold, :workers_per_partitioner, System.schedulers_online)
 
   @max_senders 128
   def senders(), do: min(Application.get_env(:manifold, :senders, System.schedulers_online), @max_senders)
 
   ## OTP
 
+  @spec start(any(), any()) :: {:error, any()} | {:ok, pid()}
   def start(_type, _args) do
     import Supervisor.Spec, warn: false
 
     partitioners =
-      for partitioner_id <- 0..(@partitioners - 1) do
-        Partitioner.child_spec(@workers_per_partitioner, name: partitioner_for(partitioner_id))
+      for partitioner_id <- 0..(partitioners() - 1) do
+        Partitioner.child_spec(workers_per_partitioner(), name: partitioner_for(partitioner_id))
       end
 
     senders =
-      for sender_id <- 0..(@senders - 1) do
+      for sender_id <- 0..(senders() - 1) do
         Sender.child_spec(name: sender_for(sender_id))
       end
 
@@ -109,7 +110,7 @@ defmodule Manifold do
   def set_partitioner_key(key) do
     partitioner = key
     |> Utils.hash()
-    |> rem(@partitioners)
+    |> rem(partitioners())
     |> partitioner_for()
 
     Process.put(:manifold_partitioner, partitioner)
@@ -143,7 +144,7 @@ defmodule Manifold do
     sender =
       key
       |> Utils.hash()
-      |> rem(@senders)
+      |> rem(senders())
       |> sender_for()
 
     Process.put(:manifold_sender, sender)
@@ -161,7 +162,7 @@ defmodule Manifold do
 
   def sender_for(pid) when is_pid(pid) do
     pid
-    |> Utils.partition_for(@senders)
+    |> Utils.partition_for(senders())
     |> sender_for
   end
 
