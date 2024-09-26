@@ -25,6 +25,11 @@ defmodule Manifold.Partitioner do
     @gen_module.cast(partitioner, {:send, pids, message})
   end
 
+  @spec send_no_suspend(partitioner :: GenServer.server(), pids :: [pid()], message :: term()) :: :ok
+  def send_no_suspend(partitioner, pids, message) do
+    @gen_module.cast(partitioner, {:send_no_suspend, pids, message})
+  end
+
   ## Server Callbacks
 
   def init(partitions) do
@@ -75,6 +80,19 @@ defmodule Manifold.Partitioner do
     {:noreply, state}
   end
 
+  def handle_cast({:send_no_suspend, [pid], message}, state) do
+    partition = Utils.partition_for(pid, tuple_size(state))
+    Worker.send_no_suspend(elem(state, partition), [pid], message)
+    {:noreply, state}
+  end
+
+  def handle_cast({:send_no_suspend, pids, message}, state) do
+    partitions = tuple_size(state)
+    pids_by_partition = Utils.partition_pids(pids, partitions)
+    do_send_no_suspend(message, pids_by_partition, state, 0, partitions)
+    {:noreply, state}
+  end
+
   def handle_cast(_message, state) do
     {:noreply, state}
   end
@@ -109,6 +127,15 @@ defmodule Manifold.Partitioner do
       Worker.send(elem(workers, partition), pids, message)
     end
     do_send(message, pids_by_partition, workers, partition + 1, partitions)
+  end
+
+  defp do_send_no_suspend(_message, _pids_by_partition, _workers, partitions, partitions), do: :ok
+  defp do_send_no_suspend(message, pids_by_partition, workers, partition, partitions) do
+    pids = elem(pids_by_partition, partition)
+    if pids != [] do
+      Worker.send_no_suspend(elem(workers, partition), pids, message)
+    end
+    do_send_no_suspend(message, pids_by_partition, workers, partition + 1, partitions)
   end
 
   defp schedule_next_hibernate() do

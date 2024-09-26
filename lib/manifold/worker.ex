@@ -9,6 +9,10 @@ defmodule Manifold.Worker do
   @spec send(pid, [pid], term) :: :ok
   def send(pid, pids, message), do: GenServer.cast(pid, {:send, pids, message})
 
+  # Use send_no_suspend for remote notes in case of unreliable connections
+  @spec send_no_suspend(pid, [pid], term) :: :ok
+  def send_no_suspend(pid, pids, message), do: GenServer.cast(pid, {:send_no_suspend, pids, message})
+
   ## Server Callbacks
   @spec init([]) :: {:ok, nil}
   def init([]) do
@@ -25,6 +29,18 @@ defmodule Manifold.Worker do
   def handle_cast({:send, pids, message}, nil) do
     message = Utils.unpack_message(message)
     for pid <- pids, do: send(pid, message)
+    {:noreply, nil}
+  end
+
+  def handle_cast({:send_no_suspend, [pid], message}, nil) do
+    message = Utils.unpack_message(message)
+    :erlang.send_nosuspend(pid, message)
+    {:noreply, nil}
+  end
+
+  def handle_cast({:send_no_suspend, pids, message}, nil) do
+    message = Utils.unpack_message(message)
+    for pid <- pids, do: :erlang.send_nosuspend(pid, message)
     {:noreply, nil}
   end
 
