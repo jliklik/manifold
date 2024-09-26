@@ -107,6 +107,52 @@ defmodule Manifold do
 
   def send(nil, _message, _options), do: :ok
 
+  @spec send_no_suspend([pid() | nil] | pid() | nil, message :: term(), options :: [option()]) :: :ok
+  def send_no_suspend(pid, message, options \\ [])
+  def send_no_suspend([pid], message, options), do: __MODULE__.send(pid, message, options)
+
+  def send_no_suspend(pids, message, options) when is_list(pids) do
+    case options[:send_mode] do
+      :offload ->
+        Sender.send_no_suspend(current_sender(), current_partitioner(), pids, message, options[:pack_mode])
+
+      nil ->
+        message = Utils.pack_message(options[:pack_mode], message)
+
+        partitioner_name = current_partitioner()
+
+        grouped_by =
+          Utils.group_by(pids, fn
+            nil -> nil
+            pid -> node(pid)
+          end)
+
+        for {node, pids} <- grouped_by,
+            node != nil,
+            do: Partitioner.send_no_suspend({partitioner_name, node}, pids, message)
+
+        :ok
+    end
+  end
+
+  def send_no_suspend(pid, message, options) when is_pid(pid) do
+    case options[:send_mode] do
+      :offload ->
+        # To maintain linearizability guaranteed by send/2, we have to send
+        # it to the sender process, even for a single receiving pid.
+        #
+        # Since we know we are only sending to a single pid, there's no
+        # performance benefit to packing the message, so we will always send as
+        # raw etf.
+        Sender.send_no_suspend(current_sender(), current_partitioner(), [pid], message, :etf)
+
+      nil ->
+        Partitioner.send_no_suspend({current_partitioner(), node(pid)}, [pid], message)
+    end
+  end
+
+  def send_no_suspend(nil, _message, _options), do: :ok
+
   def set_partitioner_key(key) do
     partitioner = key
     |> Utils.hash()

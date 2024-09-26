@@ -23,6 +23,11 @@ defmodule Manifold.Sender do
     @gen_module.cast(sender, {:send, partitioner, pids, message, pack_mode})
   end
 
+  @spec send_no_suspend(sender :: GenServer.server(), partitioner :: GenServer.server(), pids :: [pid()], message :: term(), pack_mode :: Manifold.pack_mode()) :: :ok
+  def send_no_suspend(sender, partitioner, pids, message, pack_mode) do
+    @gen_module.cast(sender, {:send_no_suspend, partitioner, pids, message, pack_mode})
+  end
+
   ## Server Callbacks
 
   def init(:ok) do
@@ -43,6 +48,22 @@ defmodule Manifold.Sender do
 
     for {node, pids} <- grouped_by, node != nil do
       Manifold.Partitioner.send({partitioner, node}, pids, message)
+    end
+
+    {:noreply, nil}
+  end
+
+  def handle_cast({:send_no_suspend, partitioner, pids, message, pack_mode}, nil) do
+    message = Utils.pack_message(pack_mode, message)
+
+    grouped_by =
+      Utils.group_by(pids, fn
+        nil -> nil
+        pid -> node(pid)
+      end)
+
+    for {node, pids} <- grouped_by, node != nil do
+      Manifold.Partitioner.send_no_suspend({partitioner, node}, pids, message)
     end
 
     {:noreply, nil}
