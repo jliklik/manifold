@@ -16,7 +16,7 @@ defmodule Manifold.Mixfile do
 
   def application do
     [
-      applications: [:logger],
+      extra_applications: [:logger],
       mod: {Manifold, []}
     ]
   end
@@ -24,7 +24,7 @@ defmodule Manifold.Mixfile do
   defp deps do
     [
       {:benchfella, "~> 0.3.0", only: [:dev, :test], runtime: false},
-      {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
+      {:ex_doc, ">= 0.0.0", only: :dev, runtime: false}
     ]
   end
 
