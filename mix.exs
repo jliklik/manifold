@@ -23,7 +23,8 @@ defmodule Manifold.Mixfile do
 
   defp deps do
     [
-      {:benchfella, "~> 0.3.0", only: [:dev, :test], runtime: false}
+      {:benchfella, "~> 0.3.0", only: [:dev, :test], runtime: false},
+      {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
     ]
   end
 
