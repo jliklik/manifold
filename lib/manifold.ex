@@ -9,14 +9,22 @@ defmodule Manifold do
 
   @type pack_mode_option :: {:pack_mode, pack_mode()}
   @type send_mode_option :: {:send_mode, :offload}
-  @type option :: pack_mode_option() | send_mode_option()
+  @type nonblocking_send :: boolean() | nil
+  @type noconnect_option :: {:noconnect, nonblocking_send()}
+  @type nosuspend_option :: {:nosuspend, nonblocking_send()}
+  @type option ::
+          pack_mode_option() | send_mode_option() | noconnect_option() | nosuspend_option()
 
   @max_partitioners 32
   @partitioners min(Application.get_env(:manifold, :partitioners, 1), @max_partitioners)
-  @workers_per_partitioner Application.get_env(:manifold, :workers_per_partitioner, System.schedulers_online)
+  @workers_per_partitioner Application.get_env(
+                             :manifold,
+                             :workers_per_partitioner,
+                             System.schedulers_online()
+                           )
 
   @max_senders 128
-  @senders min(Application.get_env(:manifold, :senders, System.schedulers_online), @max_senders)
+  @senders min(Application.get_env(:manifold, :senders, System.schedulers_online()), @max_senders)
 
   ## OTP
 
@@ -48,6 +56,8 @@ defmodule Manifold do
       {:pack_mode, :binary},
       {:pack_mode, :etf},
       {:send_mode, :offload},
+      {:noconnect, true},
+      {:nosuspend, true}
     ]
 
     # Keywords could have duplicate keys, in which case the first key wins.
@@ -67,7 +77,7 @@ defmodule Manifold do
   def send(pids, message, options) when is_list(pids) do
     case options[:send_mode] do
       :offload ->
-        Sender.send(current_sender(), current_partitioner(), pids, message, options[:pack_mode])
+        Sender.send(current_sender(), current_partitioner(), pids, message, options)
 
       nil ->
         message = Utils.pack_message(options[:pack_mode], message)
@@ -82,7 +92,7 @@ defmodule Manifold do
 
         for {node, pids} <- grouped_by,
             node != nil,
-            do: Partitioner.send({partitioner_name, node}, pids, message)
+            do: Partitioner.send({partitioner_name, node}, pids, message, options)
 
         :ok
     end
@@ -97,20 +107,22 @@ defmodule Manifold do
         # Since we know we are only sending to a single pid, there's no
         # performance benefit to packing the message, so we will always send as
         # raw etf.
-        Sender.send(current_sender(), current_partitioner(), [pid], message, :etf)
+        options = Keyword.put(options, :pack_mode, :etf)
+        Sender.send(current_sender(), current_partitioner(), [pid], message, options)
 
       nil ->
-        Partitioner.send({current_partitioner(), node(pid)}, [pid], message)
+        Partitioner.send({current_partitioner(), node(pid)}, [pid], message, options)
     end
   end
 
   def send(nil, _message, _options), do: :ok
 
   def set_partitioner_key(key) do
-    partitioner = key
-    |> Utils.hash()
-    |> rem(@partitioners)
-    |> partitioner_for()
+    partitioner =
+      key
+      |> Utils.hash()
+      |> rem(@partitioners)
+      |> partitioner_for()
 
     Process.put(:manifold_partitioner, partitioner)
   end
@@ -119,6 +131,7 @@ defmodule Manifold do
     case Process.get(:manifold_partitioner) do
       nil ->
         partitioner_for(self())
+
       partitioner ->
         partitioner
     end
@@ -133,7 +146,8 @@ defmodule Manifold do
   # The 0th partitioner does not have a number in it's process name for backwards compatibility
   # purposes.
   def partitioner_for(0), do: Manifold.Partitioner
-  for partitioner_id <- (1..@max_partitioners - 1) do
+
+  for partitioner_id <- 1..(@max_partitioners - 1) do
     def partitioner_for(unquote(partitioner_id)) do
       unquote(:"Manifold.Partitioner_#{partitioner_id}")
     end

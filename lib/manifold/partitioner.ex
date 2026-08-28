@@ -9,20 +9,25 @@ defmodule Manifold.Partitioner do
 
   ## Client
 
-  @spec child_spec(Keyword.t) :: tuple
+  @spec child_spec(Keyword.t()) :: tuple
   def child_spec(partitions, opts \\ []) do
     import Supervisor.Spec, warn: false
     supervisor(__MODULE__, [partitions, opts], id: Keyword.get(opts, :name, __MODULE__))
   end
 
-  @spec start_link(Number.t, Keyword.t) :: GenServer.on_start
+  @spec start_link(Number.t(), Keyword.t()) :: GenServer.on_start()
   def start_link(partitions, opts \\ []) do
     GenServer.start_link(__MODULE__, partitions, opts)
   end
 
-  @spec send(partitioner :: GenServer.server(), pids :: [pid()], message :: term()) :: :ok
-  def send(partitioner, pids, message) do
-    @gen_module.cast(partitioner, {:send, pids, message})
+  @spec send(
+          partitioner :: GenServer.server(),
+          pids :: [pid()],
+          message :: term(),
+          options :: [Manifold.option()]
+        ) :: :ok
+  def send(partitioner, pids, message, options) do
+    @gen_module.cast(partitioner, {:send, pids, message, options})
   end
 
   ## Server Callbacks
@@ -31,10 +36,13 @@ defmodule Manifold.Partitioner do
     # Set optimal process flags
     Process.flag(:trap_exit, true)
     Process.flag(:message_queue_data, :off_heap)
-    workers = for _ <- 0..partitions do
-      {:ok, pid} = Worker.start_link()
-      pid
-    end
+
+    workers =
+      for _ <- 0..partitions do
+        {:ok, pid} = Worker.start_link()
+        pid
+      end
+
     schedule_next_hibernate()
     {:ok, List.to_tuple(workers)}
   end
@@ -42,19 +50,22 @@ defmodule Manifold.Partitioner do
   def terminate(_reason, _state), do: :ok
 
   def handle_call(:which_children, _from, state) do
-    children = for pid <- Tuple.to_list(state), is_pid(pid) do
-      {:undefined, pid, :worker, [Worker]}
-    end
+    children =
+      for pid <- Tuple.to_list(state), is_pid(pid) do
+        {:undefined, pid, :worker, [Worker]}
+      end
+
     {:reply, children, state}
   end
 
   def handle_call(:count_children, _from, state) do
-    {:reply, [
-      specs: 1,
-      active: tuple_size(state),
-      supervisors: 0,
-      workers: tuple_size(state)
-    ], state}
+    {:reply,
+     [
+       specs: 1,
+       active: tuple_size(state),
+       supervisors: 0,
+       workers: tuple_size(state)
+     ], state}
   end
 
   def handle_call(_message, _from, state) do
@@ -62,16 +73,16 @@ defmodule Manifold.Partitioner do
   end
 
   # Specialize handling cast to a single pid.
-  def handle_cast({:send, [pid], message}, state) do
+  def handle_cast({:send, [pid], message, options}, state) do
     partition = Utils.partition_for(pid, tuple_size(state))
-    Worker.send(elem(state, partition), [pid], message)
+    Worker.send(elem(state, partition), [pid], message, options)
     {:noreply, state}
   end
 
-  def handle_cast({:send, pids, message}, state) do
+  def handle_cast({:send, pids, message, options}, state) do
     partitions = tuple_size(state)
     pids_by_partition = Utils.partition_pids(pids, partitions)
-    do_send(message, pids_by_partition, state, 0, partitions)
+    do_send(message, pids_by_partition, state, 0, partitions, options)
     {:noreply, state}
   end
 
@@ -80,15 +91,16 @@ defmodule Manifold.Partitioner do
   end
 
   def handle_info({:EXIT, pid, reason}, state) do
-    Logger.warn "manifold worker exited: #{inspect reason}"
+    Logger.warn("manifold worker exited: #{inspect(reason)}")
 
-    state = state
-      |> Tuple.to_list
+    state =
+      state
+      |> Tuple.to_list()
       |> Enum.map(fn
         ^pid -> Worker.start_link()
         pid -> pid
       end)
-      |> List.to_tuple
+      |> List.to_tuple()
 
     {:noreply, state}
   end
@@ -102,13 +114,16 @@ defmodule Manifold.Partitioner do
     {:noreply, state}
   end
 
-  defp do_send(_message, _pids_by_partition, _workers, partitions, partitions), do: :ok
-  defp do_send(message, pids_by_partition, workers, partition, partitions) do
+  defp do_send(_message, _pids_by_partition, _workers, partitions, partitions, _options), do: :ok
+
+  defp do_send(message, pids_by_partition, workers, partition, partitions, options) do
     pids = elem(pids_by_partition, partition)
+
     if pids != [] do
-      Worker.send(elem(workers, partition), pids, message)
+      Worker.send(elem(workers, partition), pids, message, options)
     end
-    do_send(message, pids_by_partition, workers, partition + 1, partitions)
+
+    do_send(message, pids_by_partition, workers, partition + 1, partitions, options)
   end
 
   defp schedule_next_hibernate() do
