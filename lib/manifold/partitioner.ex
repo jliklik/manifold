@@ -5,14 +5,17 @@ defmodule Manifold.Partitioner do
 
   alias Manifold.{Worker, Utils}
 
-  @gen_module Application.get_env(:manifold, :gen_module, GenServer)
+  @gen_module Application.compile_env(:manifold, :gen_module, GenServer)
 
   ## Client
 
   @spec child_spec(Keyword.t()) :: tuple
   def child_spec(partitions, opts \\ []) do
-    import Supervisor.Spec, warn: false
-    supervisor(__MODULE__, [partitions, opts], id: Keyword.get(opts, :name, __MODULE__))
+    %{
+      id: Keyword.get(opts, :name, __MODULE__),
+      start: {__MODULE__, :start_link, [partitions, opts]},
+      type: :supervisor
+    }
   end
 
   @spec start_link(Number.t(), Keyword.t()) :: GenServer.on_start()
@@ -91,7 +94,7 @@ defmodule Manifold.Partitioner do
   end
 
   def handle_info({:EXIT, pid, reason}, state) do
-    Logger.warn("manifold worker exited: #{inspect(reason)}")
+    Logger.warning("manifold worker exited: #{inspect(reason)}")
 
     state =
       state

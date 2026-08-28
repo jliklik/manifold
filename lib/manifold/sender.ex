@@ -3,14 +3,17 @@ defmodule Manifold.Sender do
 
   alias Manifold.Utils
 
-  @gen_module Application.get_env(:manifold, :gen_module, GenServer)
+  @gen_module Application.compile_env(:manifold, :gen_module, GenServer)
 
   ## Client
 
   @spec child_spec(Keyword.t()) :: tuple
   def child_spec(opts \\ []) do
-    import Supervisor.Spec, warn: false
-    supervisor(__MODULE__, [:ok, opts], id: Keyword.get(opts, :name, __MODULE__))
+    %{
+      id: Keyword.get(opts, :name, __MODULE__),
+      start: {__MODULE__, :start_link, [:ok, opts]},
+      type: :supervisor
+    }
   end
 
   @spec start_link(:ok, Keyword.t()) :: GenServer.on_start()
