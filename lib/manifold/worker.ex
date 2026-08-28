@@ -18,13 +18,13 @@ defmodule Manifold.Worker do
 
   def handle_cast({:send, [pid], message}, nil) do
     message = Utils.unpack_message(message)
-    send(pid, message, [:noconnect, :nosuspend])
+    Process.send(pid, message, [:noconnect, :nosuspend])
     {:noreply, nil}
   end
 
   def handle_cast({:send, pids, message}, nil) do
     message = Utils.unpack_message(message)
-    for pid <- pids, do: send(pid, message, [:noconnect, :nosuspend])
+    for pid <- pids, do: Process.send(pid, message, [:noconnect, :nosuspend])
     {:noreply, nil}
   end
 
