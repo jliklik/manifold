@@ -3,7 +3,7 @@ defmodule Manifold.Worker do
   alias Manifold.Utils
 
   ## Client
-  @spec start_link :: GenServer.on_start
+  @spec start_link :: GenServer.on_start()
   def start_link, do: GenServer.start_link(__MODULE__, [])
 
   @spec send(pid, [pid], term) :: :ok
@@ -18,13 +18,13 @@ defmodule Manifold.Worker do
 
   def handle_cast({:send, [pid], message}, nil) do
     message = Utils.unpack_message(message)
-    send(pid, message)
+    send(pid, message, [:noconnect, :nosuspend])
     {:noreply, nil}
   end
 
   def handle_cast({:send, pids, message}, nil) do
     message = Utils.unpack_message(message)
-    for pid <- pids, do: send(pid, message)
+    for pid <- pids, do: send(pid, message, [:noconnect, :nosuspend])
     {:noreply, nil}
   end
 
