@@ -7,7 +7,18 @@ defmodule Manifold.Worker do
   def start_link, do: GenServer.start_link(__MODULE__, [])
 
   @spec send(pid, [pid], term, [Manifold.option()]) :: :ok
-  def send(pid, pids, message, options), do: GenServer.cast(pid, {:send, pids, message, options})
+  def send(pid, pids, message, options) do
+    cast_msg = {:send, pids, message, options}
+    send_opts = if options[:noconnect], do: [:noconnect], else: []
+    send_opts = if options[:nosuspend], do: [:nosuspend | send_opts], else: send_opts
+
+    if send_opts != [] do
+      gen_cast_msg = {"$gen_cast", cast_msg}
+      Process.send(pid, gen_cast_msg, send_opts)
+    else
+      GenServer.cast(pid, cast_msg)
+    end
+  end
 
   ## Server Callbacks
   @spec init([]) :: {:ok, nil}

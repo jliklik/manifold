@@ -29,7 +29,16 @@ defmodule Manifold.Sender do
           options :: [Manifold.option()]
         ) :: :ok
   def send(sender, partitioner, pids, message, options) do
-    @gen_module.cast(sender, {:send, partitioner, pids, message, options})
+    cast_msg = {:send, partitioner, pids, message, options}
+    send_opts = if options[:noconnect], do: [:noconnect], else: []
+    send_opts = if options[:nosuspend], do: [:nosuspend | send_opts], else: send_opts
+
+    if send_opts != [] do
+      gen_cast_msg = {"$gen_cast", cast_msg}
+      Process.send(sender, gen_cast_msg, send_opts)
+    else
+      @gen_module.cast(sender, cast_msg)
+    end
   end
 
   ## Server Callbacks
