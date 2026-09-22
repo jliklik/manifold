@@ -70,7 +70,7 @@ defmodule ManifoldTest do
         end)
       end
 
-    Manifold.send(pids, message, noconnect: true, nosuspend: true)
+    Manifold.send(pids, message, nosuspend: true, nosuspend: true)
 
     for pid <- pids do
       assert_receive {^pid, ^message}, 1000

@@ -35,7 +35,7 @@ defmodule Manifold.Partitioner do
     send_opts = if options[:nosuspend], do: [:nosuspend | send_opts], else: send_opts
 
     if send_opts != [] do
-      gen_cast_msg = {"$gen_cast", cast_msg}
+      gen_cast_msg = {:"$gen_cast", cast_msg}
       Process.send(partitioner, gen_cast_msg, send_opts)
     else
       @gen_module.cast(partitioner, cast_msg)
